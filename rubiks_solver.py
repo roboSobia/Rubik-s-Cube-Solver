@@ -4,34 +4,89 @@ from collections import Counter
 import kociemba
 import os
 
-# Define HSV color ranges (adjust these based on your lighting/camera)
+# Initial HSV color ranges (will be updated during calibration)
 color_ranges = {
-    "W": (np.array([0, 0, 150]), np.array([180, 60, 255])),      # White (U)
-    "R": (np.array([0, 100, 100]), np.array([10, 255, 255])),    # Red (R)
-    "G": (np.array([35, 100, 100]), np.array([85, 255, 255])),   # Green (F)
-    "Y": (np.array([25, 100, 100]), np.array([35, 255, 255])),   # Yellow (D)
-    "O": (np.array([10, 100, 100]), np.array([25, 255, 255])),   # Orange (L)
-    "B": (np.array([85, 100, 100]), np.array([130, 255, 255]))   # Blue (B)
+    "W": (np.array([0, 0, 150]), np.array([180, 60, 255])),      # White
+    "R": (np.array([0, 100, 100]), np.array([10, 255, 255])),    # Red
+    "G": (np.array([35, 100, 100]), np.array([85, 255, 255])),   # Green
+    "Y": (np.array([25, 100, 100]), np.array([35, 255, 255])),   # Yellow
+    "O": (np.array([10, 100, 100]), np.array([25, 255, 255])),   # Orange
+    "B": (np.array([85, 100, 100]), np.array([130, 255, 255]))   # Blue
 }
+
+def calibrate_colors(cap, window_size, color_names=["W", "R", "G", "Y", "O", "B"]):
+    """Calibrate HSV ranges by sampling the center of each face."""
+    print("\nStarting calibration. Show each face’s center when prompted.")
+    print("Press 'c' to capture, 'q' to quit early.")
+    
+    calibrated_ranges = {}
+    grid_size = int(min(window_size) * 0.4)
+    grid_cell_size = grid_size // 3
+    pad_x, pad_y = 20, 50
+    
+    for color in color_names:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to grab frame during calibration")
+                return None
+            
+            frame = cv2.resize(frame, window_size, interpolation=cv2.INTER_AREA)
+            display = frame.copy()
+            
+            # Draw a small box around the center cell (1,1)
+            center_y_start = pad_y + grid_cell_size
+            center_y_end = pad_y + 2 * grid_cell_size
+            center_x_start = pad_x + grid_cell_size
+            center_x_end = pad_x + 2 * grid_cell_size
+            cv2.rectangle(display, (center_x_start, center_y_start), 
+                         (center_x_end, center_y_end), (0, 255, 0), 2)
+            
+            instruction = f"Show {color} center (e.g., White=W, Red=R), then press 'c'"
+            cv2.putText(display, instruction, (pad_x, pad_y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.imshow("Calibration", display)
+            
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('c'):
+                roi = frame[center_y_start:center_y_end, center_x_start:center_x_end]
+                hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+                avg_hsv = np.mean(hsv_roi, axis=(0, 1))
+                
+                # Define a range around the sampled HSV
+                h_range = 10 if color != "W" else 90  # Wider hue for white
+                s_range = 50
+                v_range = 50
+                lower = np.array([max(0, avg_hsv[0] - h_range), 
+                                max(0, avg_hsv[1] - s_range), 
+                                max(0, avg_hsv[2] - v_range)])
+                upper = np.array([min(180, avg_hsv[0] + h_range), 
+                                min(255, avg_hsv[1] + s_range), 
+                                min(255, avg_hsv[2] + v_range)])
+                
+                calibrated_ranges[color] = (lower, upper)
+                print(f"Calibrated {color}: HSV={avg_hsv}, Range={lower} to {upper}")
+                break
+            elif key == ord('q'):
+                print("Calibration aborted.")
+                return None
+    
+    cv2.destroyWindow("Calibration")
+    return calibrated_ranges
 
 def detect_color(roi, color_ranges):
     """
     Detect the dominant color in a region of interest (ROI) using multiple methods.
     Returns the first letter of the color (e.g., 'R' for Red).
-    Always returns the closest color match instead of "Unknown".
     """
     if len(roi.shape) == 3 and roi.shape[2] == 3:
         if roi.dtype != np.uint8:
             roi = np.uint8(roi)
         
-        # Use center portion of ROI
         h, w = roi.shape[:2]
         center_roi = roi[h//4:3*h//4, w//4:3*w//4]
-        
-        # Convert to HSV
         hsv_roi = cv2.cvtColor(center_roi, cv2.COLOR_BGR2HSV)
         
-        # Method 1: Range-based matching
         color_matches = {}
         for color, (lower, upper) in color_ranges.items():
             mask = cv2.inRange(hsv_roi, lower, upper)
@@ -41,26 +96,20 @@ def detect_color(roi, color_ranges):
         range_best_color = max(color_matches, key=color_matches.get)
         range_best_match = color_matches[range_best_color]
         
-        # Method 2: Dominant color
         pixels = hsv_roi.reshape((-1, 3))
         pixel_list = [tuple(p) for p in pixels]
         most_common_hsv = Counter(pixel_list).most_common(1)[0][0]
         
-        # Calculate which range the dominant color is closest to
         dominant_color = None
         min_distance = float('inf')
         
         for color, (lower, upper) in color_ranges.items():
-            # Calculate middle point of the color range
             middle_hsv = (lower + upper) / 2
-            
-            # Calculate distance (with special handling for hue circular nature)
             h_dist = min(abs(most_common_hsv[0] - middle_hsv[0]), 
                         180 - abs(most_common_hsv[0] - middle_hsv[0]))
             s_dist = abs(most_common_hsv[1] - middle_hsv[1])
             v_dist = abs(most_common_hsv[2] - middle_hsv[2])
             
-            # Weight hue more heavily for chromatic colors, but less for white
             if color == "W":
                 distance = 0.1 * h_dist + 0.3 * s_dist + 0.6 * v_dist
             else:
@@ -70,17 +119,15 @@ def detect_color(roi, color_ranges):
                 min_distance = distance
                 dominant_color = color
         
-        # Combine results
         print(f"ROI Analysis:")
         print(f"  Range-based best: {range_best_color} ({range_best_match:.1f}%)")
         print(f"  Dominant HSV: {most_common_hsv}, closest match: {dominant_color}")
         
-        if range_best_match > 10:  # Strong range match threshold
+        if range_best_match > 10:
             return range_best_color
-        elif dominant_color:  # Return closest color match
+        elif dominant_color:
             return dominant_color
         
-        # Fallback to average color (always find closest)
         avg_hsv = np.mean(hsv_roi, axis=(0,1))
         closest_color = None
         min_distance = float('inf')
@@ -104,11 +151,9 @@ def detect_color(roi, color_ranges):
         print(f"  Using closest color match: {closest_color}")
         return closest_color
     
-    # If all else fails, return white as default
     return "W"
 
 def validate_cube(cube, order_name):
-    """Validate cube string: 54 chars, 9 of each color."""
     if len(cube) != 54:
         raise ValueError(f"{order_name} must be 54 characters")
     counts = Counter(cube)
@@ -116,7 +161,6 @@ def validate_cube(cube, order_name):
         raise ValueError(f"{order_name} invalid: {counts} (need 9 of each of 6 colors)")
 
 def remap_colors_to_kociemba(cube_frblud):
-    """Map custom colors to UDLRFB based on centers."""
     validate_cube(cube_frblud, "FRBLUD")
     centers = [cube_frblud[i] for i in [4, 13, 22, 31, 40, 49]]  # F, R, B, L, U, D
     color_map = {
@@ -130,17 +174,14 @@ def remap_colors_to_kociemba(cube_frblud):
     return color_map, ''.join(color_map[c] for c in cube_frblud)
 
 def remap_cube_to_kociemba(cube_frblud_remapped):
-    """Reorder FRBLUD to URFDLB."""
     front, right, back, left, up, down = [cube_frblud_remapped[i:i+9] for i in range(0, 54, 9)]
     return up + right + front + down + left + back
 
 def get_solved_state(cube_frblud, color_map):
-    """Generate solved state in FRBLUD order."""
     centers = [cube_frblud[i] for i in [4, 13, 22, 31, 40, 49]]  # F, R, B, L, U, D
     return ''.join(c * 9 for c in centers)
 
 def solve_cube_frblud(cube_frblud):
-    """Solve cube in FRBLUD order with custom colors."""
     try:
         color_map, cube_frblud_remapped = remap_colors_to_kociemba(cube_frblud)
         scrambled_kociemba = remap_cube_to_kociemba(cube_frblud_remapped)
@@ -156,7 +197,6 @@ def solve_cube_frblud(cube_frblud):
         return None
 
 def print_full_cube_state(cube_state):
-    """Display the cube state in a readable format."""
     print("\nFull cube state (Front, Right, Back, Left, Up, Down):")
     print("".join(cube_state))
     print("\nVisual representation:")
@@ -175,7 +215,8 @@ def print_full_cube_state(cube_state):
         print("        " + " ".join(cube_state[start:start+3]))
 
 def main():
-    # Create temp folder if it doesn't exist
+    global color_ranges  # Declare color_ranges as global at the start
+    
     temp_dir = "temp"
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
@@ -194,17 +235,18 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     
+    WINDOW_SIZE = (800, 600)
+    
     print("Stream opened successfully.")
     print("Align cube in this order: Front, Right, Back, Left, Up, Down")
     print("Colors: B=Blue, Y=Yellow, R=Red, G=Green, W=White, O=Orange")
-    print("Press 'q' to quit, 'c' to capture, 'r' to restart.")
+    print("Press 'q' to quit, 'c' to capture, 'r' to restart, 'a' to calibrate.")
     
     cube_faces = {}
     cube_state = []
     face_order = ["Front", "Right", "Back", "Left", "Up", "Down"]
     current_face_idx = 0
     
-    WINDOW_SIZE = (800, 600)
     cv2.namedWindow("Rubik's Cube Scanner", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Rubik's Cube Scanner", WINDOW_SIZE[0], WINDOW_SIZE[1])
     
@@ -233,6 +275,9 @@ def main():
             instruction = f"Align {face_order[current_face_idx]} face (B=Blue, Y=Yellow, R=Red, G=Green, W=White, O=Orange)"
             cv2.putText(display, instruction, (pad_x, pad_y - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        else:
+            cv2.putText(display, "All faces captured. Press 'r' to restart, 'a' to calibrate, or 'q' to quit.", 
+                        (pad_x, pad_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         cv2.imshow("Rubik's Cube Scanner", display)
         
@@ -265,7 +310,6 @@ def main():
                     print(f"  Row {i+1}: {' '.join(row)}")
                 
                 cube_state.extend(face_colors)
-                # Save image in temp folder
                 image_path = os.path.join(temp_dir, f"{face_name.lower()}_processed.jpg")
                 cv2.imwrite(image_path, image)
                 cv2.imshow(f"{face_name} Face Processed", image)
@@ -281,12 +325,26 @@ def main():
                             print("Apply these moves to solve your cube!")
                     except Exception as e:
                         print(f"Failed to solve: {e}")
-                    print("\nPress 'q' to quit or 'r' to restart.")
+                    print("\nPress 'q' to quit, 'r' to restart, 'a' to calibrate.")
         elif key == ord('r'):
             cube_faces = {}
             cube_state = []
             current_face_idx = 0
             print("\nRestarting cube scan...")
+        elif key == ord('a'):
+            print("\nEntering calibration mode...")
+            calibrated_ranges = calibrate_colors(cap, WINDOW_SIZE)
+            if calibrated_ranges is not None:
+                color_ranges.clear()  # Clear old ranges
+                color_ranges.update(calibrated_ranges)  # Update with new ranges
+                print("Calibration complete. Using custom color ranges.")
+                # Reset scanning state
+                cube_faces = {}
+                cube_state = []
+                current_face_idx = 0
+                print("Restarting cube scan...")
+            else:
+                print("Calibration aborted. Resuming with previous settings.")
     
     cap.release()
     cv2.destroyAllWindows()
