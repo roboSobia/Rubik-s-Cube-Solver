@@ -183,6 +183,7 @@ def get_solved_state(cube_frblud, color_map):
 
 def solve_cube_frblud(cube_frblud):
     try:
+        # Existing solving logic
         color_map, cube_frblud_remapped = remap_colors_to_kociemba(cube_frblud)
         scrambled_kociemba = remap_cube_to_kociemba(cube_frblud_remapped)
         solved_frblud = get_solved_state(cube_frblud, color_map)
@@ -191,10 +192,40 @@ def solve_cube_frblud(cube_frblud):
         validate_cube(scrambled_kociemba, "Scrambled Kociemba")
         validate_cube(solved_kociemba, "Solved Kociemba")
         solution = kociemba.solve(scrambled_kociemba, solved_kociemba)
-        return solution
+        
+        # Replacement sequences
+        u_replacement = "R L F2 B2 R' L' D R L F2 B2 R' L'"  # U move (clockwise)
+        u_prime_replacement = "R L F2 B2 R' L' D' R L F2 B2 R' L'"  # U' move (counterclockwise)
+        u2_replacement = "R L F2 B2 R' L' D2 R L F2 B2 R' L'"  # U2 move (180°)
+        
+        # Split the solution into individual moves
+        moves = solution.split()
+        
+        # Replace U, U', and U2 with their equivalents
+        modified_solution = []
+        for move in moves:
+            if move == "U":
+                modified_solution.append(u_replacement)
+            elif move == "U'":
+                modified_solution.append(u_prime_replacement)
+            elif move == "U2":  # Handle U2 directly with its sequence
+                modified_solution.append(u2_replacement)
+            else:
+                modified_solution.append(move)
+        
+        # Join the modified moves back into a string
+        final_solution = " ".join(modified_solution)
+        return final_solution
+    
     except Exception as e:
         print(f"Error solving cube: {str(e)}")
         return None
+
+# Example usage (assuming the rest of your imports and functions are defined)
+# cube_frblud = <your cube state>
+# solution = solve_cube_frblud(cube_frblud)
+# print(solution)
+
 
 def print_full_cube_state(cube_state):
     print("\nFull cube state (Front, Right, Back, Left, Up, Down):")
@@ -317,7 +348,7 @@ def construct_cube_from_u_scans(u_scans):
 def main():
     global color_ranges
     
-    temp_dir = "temp"
+    temp_dir = "cube_scans"
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
     
