@@ -2,9 +2,15 @@ import serial
 import time
 
 # Serial port configuration
-SERIAL_PORT = 'COM1' 
+SERIAL_PORT = 'COM2' 
 SERIAL_BAUDRATE = 9600
 SERIAL_TIMEOUT = 1
+
+def main():
+  solution = "U R U' R' U' F' U F"
+  print(f"Sending solution	: {solution}")
+  serial_send(solution)
+  return
 
 def serial_send(solution):
   try:
@@ -21,6 +27,8 @@ def serial_send(solution):
     ser.close()
     print(f"Closed connection to {SERIAL_PORT}")
 
-  except serial.SerialException:
+  except send_solution.SerialException:
     print(f"Failed to connect to {SERIAL_PORT}")
     return
+
+main()
