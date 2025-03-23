@@ -90,6 +90,16 @@ void executeSolution(String solution) {
     }
 }
 
+void getInitState() {
+  for (int i = 0; i < 6; i++) {
+    // Sequence => scan => R L' => scan => B F // Repeat for all 6 faces
+    delay(3000);   // scan
+    executeSolution("R L'");
+    delay(3000);
+    executeSolution("B F'");
+  }
+}
+
 void loop() {
   // Check if data is available to read
   if (Serial.available() > 0) {
@@ -98,6 +108,9 @@ void loop() {
     // Print the received solution to the Serial Monitor 
     Serial.print("Received: ");
     Serial.println(solution);
+
+    // Scan all initial faces
+    getInitState();
 
     // Process the solution
     executeSolution(solution);
