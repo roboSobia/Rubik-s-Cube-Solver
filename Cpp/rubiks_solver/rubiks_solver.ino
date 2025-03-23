@@ -1,18 +1,18 @@
 #include <AccelStepper.h>
 
 // Step pins
-#define STEP_PIN_stepper1 18
-#define STEP_PIN_stepper2 21
-#define STEP_PIN_stepper3 23
-#define STEP_PIN_stepper4 26
-#define STEP_PIN_stepper5 32
+#define STEP_PIN_backStepper 18
+#define STEP_PIN_rightStepper 21
+#define STEP_PIN_leftStepper 23
+#define STEP_PIN_downStepper 26
+#define STEP_PIN_frontStepper 32
 
 // Direction pins 
-#define DIR_PIN_stepper1 19
-#define DIR_PIN_stepper2 22
-#define DIR_PIN_stepper3 25
-#define DIR_PIN_stepper4 27
-#define DIR_PIN_stepper5 33
+#define DIR_PIN_backStepper 19
+#define DIR_PIN_rightStepper 22
+#define DIR_PIN_leftStepper 25
+#define DIR_PIN_downStepper 27
+#define DIR_PIN_frontStepper 33
 
 // Stepper settings
 // NEMA17 stepper motors have: 200 steps per revolution
@@ -23,22 +23,22 @@
 #define stepsForHalfCycle (stepsPerRevolution * microsteppingInverse / 4)  // 3200 steps
 
 // Initialize stepper motors
-AccelStepper stepper1(AccelStepper::DRIVER, STEP_PIN_stepper1, DIR_PIN_stepper1);
-AccelStepper stepper2(AccelStepper::DRIVER, STEP_PIN_stepper2, DIR_PIN_stepper2);
-AccelStepper stepper3(AccelStepper::DRIVER, STEP_PIN_stepper3, DIR_PIN_stepper3);
-AccelStepper stepper4(AccelStepper::DRIVER, STEP_PIN_stepper4, DIR_PIN_stepper4);
-AccelStepper stepper5(AccelStepper::DRIVER, STEP_PIN_stepper5, DIR_PIN_stepper5);
+AccelStepper backStepper(AccelStepper::DRIVER, STEP_PIN_backStepper, DIR_PIN_backStepper);
+AccelStepper rightStepper(AccelStepper::DRIVER, STEP_PIN_rightStepper, DIR_PIN_rightStepper);
+AccelStepper leftStepper(AccelStepper::DRIVER, STEP_PIN_leftStepper, DIR_PIN_leftStepper);
+AccelStepper downStepper(AccelStepper::DRIVER, STEP_PIN_downStepper, DIR_PIN_downStepper);
+AccelStepper frontStepper(AccelStepper::DRIVER, STEP_PIN_frontStepper, DIR_PIN_frontStepper);
 
 void setup() {
   
   // Start serial communication at 115200 baud rate
   Serial.begin(115200);
   
-  stepper1.setMaxSpeed(1000); stepper1.setAcceleration(500);
-  stepper2.setMaxSpeed(1000); stepper2.setAcceleration(500);
-  stepper3.setMaxSpeed(1000); stepper3.setAcceleration(500);
-  stepper4.setMaxSpeed(1000); stepper4.setAcceleration(500);
-  stepper5.setMaxSpeed(1000); stepper5.setAcceleration(500);
+  backStepper.setMaxSpeed(1000); backStepper.setAcceleration(500);
+  rightStepper.setMaxSpeed(1000); rightStepper.setAcceleration(500);
+  leftStepper.setMaxSpeed(1000); leftStepper.setAcceleration(500);
+  downStepper.setMaxSpeed(1000); downStepper.setAcceleration(500);
+  frontStepper.setMaxSpeed(1000); frontStepper.setAcceleration(500);
 }
 
 void moveStepper(AccelStepper &stepper, bool left) {
@@ -52,38 +52,38 @@ void executeSolution(String solution) {
   for (int i = 0; i < solution.length(); i++) {
       char c = solution.charAt(i);
       if (c == 'B' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {        // green
-        moveStepper(stepper1, true);
+        moveStepper(backStepper, true);
       } else if (c == 'R' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     // orange
-        moveStepper(stepper2, true);
+        moveStepper(rightStepper, true);
       } else if (c == 'L' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {      // red
-        moveStepper(stepper3, true);
+        moveStepper(leftStepper, true);
       } else if (c == 'D' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     //yellow
-        moveStepper(stepper4, true);
+        moveStepper(downStepper, true);
       } else if (c == 'F' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {   // Blue
-        moveStepper(stepper5, true);
+        moveStepper(frontStepper, true);
       } else if (c == '2') {
         if (solution.charAt(i - 1) == 'B') {
-          moveStepper(stepper1, true);
+          moveStepper(backStepper, true);
         } else if (solution.charAt(i - 1) == 'R') {
-          moveStepper(stepper2, true);
+          moveStepper(rightStepper, true);
         } else if (solution.charAt(i - 1) == 'L') {
-          moveStepper(stepper3, true);
+          moveStepper(leftStepper, true);
         } else if (solution.charAt(i - 1) == 'D') {
-          moveStepper(stepper4, true);
+          moveStepper(downStepper, true);
         } else if (solution.charAt(i - 1) == 'F') {
-          moveStepper(stepper5, true);
+          moveStepper(frontStepper, true);
         }
       } else if (c == '\'') {
         if (solution.charAt(i - 1) == 'B') {
-          moveStepper(stepper1, false);
+          moveStepper(backStepper, false);
         } else if (solution.charAt(i - 1) == 'R') {
-          moveStepper(stepper2, false);
+          moveStepper(rightStepper, false);
         } else if (solution.charAt(i - 1) == 'L') {
-          moveStepper(stepper3, false);
+          moveStepper(leftStepper, false);
         } else if (solution.charAt(i - 1) == 'D') {
-          moveStepper(stepper4, false);
+          moveStepper(downStepper, false);
         } else if (solution.charAt(i - 1) == 'F') {
-          moveStepper(stepper5, false);
+          moveStepper(frontStepper, false);
         }
       }
       delay(1000);
