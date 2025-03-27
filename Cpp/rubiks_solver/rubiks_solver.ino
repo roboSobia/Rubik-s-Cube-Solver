@@ -144,8 +144,10 @@ int scan() {
 String getSolution(WiFiClient client) {
   Serial.println("New Client Connected!");
   String solution;
-  while (client.connected()) {
+  unsigned long timeout = millis();
+  while (client.connected() && millis() - timeout < 10000) { // 10 seconds timeout
     if (client.available()) {
+      timeout = millis(); // Reset timeout
       String command = client.readStringUntil('\n');
       command.trim();
       Serial.println("Received: " + command);
@@ -178,8 +180,10 @@ void loop() {
   }
   client.stop();
 
-  executeSolution(solution);
-
+  if(solution.length() > 0) {
+    executeSolution(solution);
+  }
+  
   Serial.println("Client Disconnected");
   // B2 R' F' R2 B' R F B2 L R L F2 B2 R' L' D R L F2 B2 R' L' R2 B2 L2 D' R2 F2 D2 F2 R L F2 B2 R' L' D R L F2 B2 R' L' 
 }

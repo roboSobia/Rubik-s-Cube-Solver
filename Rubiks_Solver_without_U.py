@@ -21,11 +21,13 @@ ESP32_PORT = 80  # Port number of the ESP32
 def send_command(command):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(10)
             sock.connect((ESP32_IP, ESP32_PORT))
             sock.sendall(command.encode())
             print(f"Sent command: {command}")
             response = sock.recv(1024).decode().strip()
             print(f"Received response: {response}")
+            return response
     except Exception as e:
         print(f"Error sending command: {str(e)}")
 
@@ -425,9 +427,9 @@ def main():
             break
         elif key == ord('c'):
             if current_scan_idx < 12:
-                # Stop motors every 2 
-                if current_scan_idx % 2 == 0:
-                    send_command("STOP")  # Stop motors before capture
+                response = send_command("STOP")  # Stop motors before capture
+                if response != "ACK_STOP":
+                    print("Warning: Stop command failed\n")
                 image = frame.copy()
                 print(f"\nCaptured U face scan #{current_scan_idx + 1}")
                 
@@ -464,7 +466,12 @@ def main():
                         if solution:
                             print(f"\nSolution: {solution}")
                             print("Apply these moves to solve your cube!")
-                            send_command(f"SOLVE:{solution}")
+                            response = send_command(f"SOLVE:{solution}")
+                            if response == "SCANS DONE":
+                                print("All scans completed early")
+                                current_scan_idx = 12
+                            elif response != "ACK_MOVE":
+                                print("Warning: Move command failed")
                     except Exception as e:
                         print(f"Failed to solve: {e}")
                     print("\nPress 'q' to quit, 'r' to restart, 'a' to calibrate.")
