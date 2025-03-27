@@ -3,6 +3,7 @@ import numpy as np
 from collections import Counter
 import kociemba
 import os
+import socket
 
 # Initial HSV color ranges (will be updated during calibration)
 color_ranges = {
@@ -13,6 +14,20 @@ color_ranges = {
     "O": (np.array([10, 100, 100]), np.array([25, 255, 255])),   # Orange
     "B": (np.array([85, 100, 100]), np.array([130, 255, 255]))   # Blue
 }
+
+ESP32_IP = ""    # IP address of the ESP32
+ESP32_PORT = 80  # Port number of the ESP32	
+
+def send_command(command):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((ESP32_IP, ESP32_PORT))
+            sock.sendall(command.encode())
+            print(f"Sent command: {command}")
+            response = sock.recv(1024).decode().strip()
+            print(f"Received response: {response}")
+    except Exception as e:
+        print(f"Error sending command: {str(e)}")
 
 def calibrate_colors(cap, window_size, color_names=["W", "R", "G", "Y", "O", "B"]):
     """Calibrate HSV ranges by sampling the center of each face."""
@@ -245,11 +260,6 @@ def print_full_cube_state(cube_state):
         start = idx[5] + i*3  # Down face
         print("        " + " ".join(cube_state[start:start+3]))
 
-import cv2
-import numpy as np
-from collections import Counter
-import kociemba
-import os
 
 # [Your existing color_ranges and functions like calibrate_colors, detect_color, etc., remain unchanged]
 
@@ -415,6 +425,7 @@ def main():
             break
         elif key == ord('c'):
             if current_scan_idx < 12:
+                send_command("STOP")  # Stop motors before capture
                 image = frame.copy()
                 print(f"\nCaptured U face scan #{current_scan_idx + 1}")
                 
@@ -451,9 +462,12 @@ def main():
                         if solution:
                             print(f"\nSolution: {solution}")
                             print("Apply these moves to solve your cube!")
+                            send_command(solution)  # Finish scanning
                     except Exception as e:
                         print(f"Failed to solve: {e}")
                     print("\nPress 'q' to quit, 'r' to restart, 'a' to calibrate.")
+                else:
+                    send_command("MOVE")  # Move to the next scan position
         elif key == ord('r'):
             u_scans = [[] for _ in range(12)]
             current_scan_idx = 0

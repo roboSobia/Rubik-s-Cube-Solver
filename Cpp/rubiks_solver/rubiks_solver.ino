@@ -30,7 +30,6 @@ AccelStepper downStepper(AccelStepper::DRIVER, STEP_PIN_downStepper, DIR_PIN_dow
 AccelStepper frontStepper(AccelStepper::DRIVER, STEP_PIN_frontStepper, DIR_PIN_frontStepper);
 
 void setup() {
-  
   // Start serial communication at 115200 baud rate
   Serial.begin(115200);
   
@@ -102,15 +101,16 @@ void getInitState() {
 
 void loop() {
   // Check if data is available to read
+  
+  // Scan all initial faces
+    getInitState();
+
   if (Serial.available() > 0) {
     // Read the incoming data as a string
     String solution = Serial.readString();
     // Print the received solution to the Serial Monitor 
     Serial.print("Received: ");
     Serial.println(solution);
-
-    // Scan all initial faces
-    getInitState();
 
     // Process the solution
     executeSolution(solution);
