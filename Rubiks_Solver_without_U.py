@@ -425,7 +425,9 @@ def main():
             break
         elif key == ord('c'):
             if current_scan_idx < 12:
-                send_command("STOP")  # Stop motors before capture
+                # Stop motors every 2 
+                if current_scan_idx % 2 == 0:
+                    send_command("STOP")  # Stop motors before capture
                 image = frame.copy()
                 print(f"\nCaptured U face scan #{current_scan_idx + 1}")
                 
@@ -462,7 +464,7 @@ def main():
                         if solution:
                             print(f"\nSolution: {solution}")
                             print("Apply these moves to solve your cube!")
-                            send_command(solution)  # Finish scanning
+                            send_command(f"SOLVE:{solution}")
                     except Exception as e:
                         print(f"Failed to solve: {e}")
                     print("\nPress 'q' to quit, 'r' to restart, 'a' to calibrate.")

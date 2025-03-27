@@ -1,4 +1,5 @@
 #include <AccelStepper.h>
+#include <WiFi.h>
 
 // Step pins
 #define STEP_PIN_backStepper 18
@@ -22,6 +23,11 @@
 
 #define stepsForHalfCycle (stepsPerRevolution * microsteppingInverse / 4)  // 3200 steps
 
+const char* ssid = "WE4DD9A3";
+const char* password = "aa07002c";
+int numOfScans = 0;
+bool firstSequence = false; // R L'
+
 // Initialize stepper motors
 AccelStepper backStepper(AccelStepper::DRIVER, STEP_PIN_backStepper, DIR_PIN_backStepper);
 AccelStepper rightStepper(AccelStepper::DRIVER, STEP_PIN_rightStepper, DIR_PIN_rightStepper);
@@ -29,9 +35,25 @@ AccelStepper leftStepper(AccelStepper::DRIVER, STEP_PIN_leftStepper, DIR_PIN_lef
 AccelStepper downStepper(AccelStepper::DRIVER, STEP_PIN_downStepper, DIR_PIN_downStepper);
 AccelStepper frontStepper(AccelStepper::DRIVER, STEP_PIN_frontStepper, DIR_PIN_frontStepper);
 
+// TCP server on port 80
+WiFiServer server(80);
+
 void setup() {
   // Start serial communication at 115200 baud rate
   Serial.begin(115200);
+  WiFi.begin(ssid, password);
+
+  // Connect to the wifi and print the ESP32 IP address
+  Serial.println("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected!");
+  Serial.print("ESP32 IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  server.begin();
   
   backStepper.setMaxSpeed(1000); backStepper.setAcceleration(500);
   rightStepper.setMaxSpeed(1000); rightStepper.setAcceleration(500);
@@ -45,6 +67,14 @@ void moveStepper(AccelStepper &stepper, bool left) {
   while (stepper.distanceToGo() != 0) {
     stepper.run();
   }
+}
+
+void stopMotors() {
+  backStepper.stop();
+  rightStepper.stop();
+  leftStepper.stop();
+  downStepper.stop();
+  frontStepper.stop();
 }
 
 void executeSolution(String solution) {
@@ -89,31 +119,67 @@ void executeSolution(String solution) {
     }
 }
 
-void getInitState() {
-  for (int i = 0; i < 6; i++) {
-    // Sequence => scan => R L' => scan => B F // Repeat for all 6 faces
-    delay(3000);   // scan
+// return 0 if all scans are finished
+// return 1 if there are scans left
+int scan() {
+  // No more scans left
+  if (numOfScans > 12) {
+    return 0;
+  }
+
+  //  Sequence => scan => R L' => scan => B F // Repeat for all 6 faces
+  if (firstSequence) {
     executeSolution("R L'");
-    delay(3000);
+  } else {
     executeSolution("B F'");
   }
+  delay(1000);
+
+  firstSequence = !firstSequence;
+  numOfScans++;
+
+  return 1;
+}
+
+String getSolution(WiFiClient client) {
+  Serial.println("New Client Connected!");
+  String solution;
+  while (client.connected()) {
+    if (client.available()) {
+      String command = client.readStringUntil('\n');
+      command.trim();
+      Serial.println("Received: " + command);
+
+      if (command == "STOP") {
+        stopMotors();
+        client.println("ACK_STOP");
+      } else if (command == "MOVE") {
+        if(!scan()) {
+          // All scans are done => send 
+          client.println("SCANS DONE");
+        } else {
+          client.println("ACK_MOVE");
+        }
+      } else if (command.startsWith("SOLVE:")) {
+        solution = command.substring(6);
+        client.println("ACK_SOLVE");
+        Serial.println("Solution: " + solution);
+      }
+    }
+  }
+  return solution;
 }
 
 void loop() {
-  // Check if data is available to read
-  
-  // Scan all initial faces
-    getInitState();
-
-  if (Serial.available() > 0) {
-    // Read the incoming data as a string
-    String solution = Serial.readString();
-    // Print the received solution to the Serial Monitor 
-    Serial.print("Received: ");
-    Serial.println(solution);
-
-    // Process the solution
-    executeSolution(solution);
+  WiFiClient client = server.available();
+  String solution;
+  if (client) {
+    solution = getSolution(client);
   }
+  client.stop();
+
+  executeSolution(solution);
+
+  Serial.println("Client Disconnected");
   // B2 R' F' R2 B' R F B2 L R L F2 B2 R' L' D R L F2 B2 R' L' R2 B2 L2 D' R2 F2 D2 F2 R L F2 B2 R' L' D R L F2 B2 R' L' 
 }
