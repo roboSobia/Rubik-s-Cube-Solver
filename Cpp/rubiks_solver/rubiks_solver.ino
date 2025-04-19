@@ -80,16 +80,36 @@ void stopMotors() {
 void executeSolution(String solution) {
   for (int i = 0; i < solution.length(); i++) {
       char c = solution.charAt(i);
-      if (c == 'B' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {        // green
-        moveStepper(backStepper, true);
-      } else if (c == 'R' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     // orange
-        moveStepper(rightStepper, true);
-      } else if (c == 'L' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {      // red
-        moveStepper(leftStepper, true);
-      } else if (c == 'D' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     //yellow
-        moveStepper(downStepper, true);
-      } else if (c == 'F' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {   // Blue
-        moveStepper(frontStepper, true);
+      if (c == 'B') {                         // green
+        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
+          moveStepper(backStepper, false);
+        } else {
+          moveStepper(backStepper, true);
+        }
+      } else if (c == 'R') {       // orange
+        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
+          moveStepper(rightStepper, false);
+        } else {
+          moveStepper(rightStepper, true);
+        }
+      } else if (c == 'L') {       // red
+        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
+          moveStepper(leftStepper, false);
+        } else {
+          moveStepper(leftStepper, true);
+        }
+      } else if (c == 'D') {       // yellow
+        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
+          moveStepper(downStepper, false);
+        } else {
+          moveStepper(downStepper, true);
+        }
+      } else if (c == 'F') {       // Blue
+        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
+          moveStepper(frontStepper, false);
+        } else {
+          moveStepper(frontStepper, true);
+        }
       } else if (c == '2') {
         if (solution.charAt(i - 1) == 'B') {
           moveStepper(backStepper, true);
@@ -101,18 +121,6 @@ void executeSolution(String solution) {
           moveStepper(downStepper, true);
         } else if (solution.charAt(i - 1) == 'F') {
           moveStepper(frontStepper, true);
-        }
-      } else if (c == '\'') {
-        if (solution.charAt(i - 1) == 'B') {
-          moveStepper(backStepper, false);
-        } else if (solution.charAt(i - 1) == 'R') {
-          moveStepper(rightStepper, false);
-        } else if (solution.charAt(i - 1) == 'L') {
-          moveStepper(leftStepper, false);
-        } else if (solution.charAt(i - 1) == 'D') {
-          moveStepper(downStepper, false);
-        } else if (solution.charAt(i - 1) == 'F') {
-          moveStepper(frontStepper, false);
         }
       }
       delay(1000);
