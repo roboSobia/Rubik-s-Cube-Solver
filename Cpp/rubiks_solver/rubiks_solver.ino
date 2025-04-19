@@ -83,30 +83,35 @@ void executeSolution(String solution) {
       if (c == 'B') {                         // green
         if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
           moveStepper(backStepper, false);
+          i++;
         } else {
           moveStepper(backStepper, true);
         }
       } else if (c == 'R') {       // orange
         if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
           moveStepper(rightStepper, false);
+          i++;
         } else {
           moveStepper(rightStepper, true);
         }
       } else if (c == 'L') {       // red
         if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
           moveStepper(leftStepper, false);
+          i++;
         } else {
           moveStepper(leftStepper, true);
         }
       } else if (c == 'D') {       // yellow
         if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
           moveStepper(downStepper, false);
+          i++;
         } else {
           moveStepper(downStepper, true);
         }
       } else if (c == 'F') {       // Blue
         if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
           moveStepper(frontStepper, false);
+          i++;
         } else {
           moveStepper(frontStepper, true);
         }
