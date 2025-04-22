@@ -1,5 +1,16 @@
 #include <AccelStepper.h>
 #include <WiFi.h>
+#include <WebServer.h>
+#include <WebSocketsServer.h>
+#include <SPIFFS.h>
+
+// WiFi credentials - replace with your network info
+const char* ssid = "YourWiFiName";
+const char* password = "YourWiFiPassword";
+
+// Create web server and websocket server
+WebServer server(80);
+WebSocketsServer webSocket = WebSocketsServer(81);
 
 // Step pins
 #define STEP_PIN_backStepper 18
@@ -16,17 +27,10 @@
 #define DIR_PIN_frontStepper 33
 
 // Stepper settings
-// NEMA17 stepper motors have: 200 steps per revolution
-// DRV8825 has inverse of microstepping = 32
 #define stepsPerRevolution 200
 #define microsteppingInverse 32
 
 #define stepsForHalfCycle (stepsPerRevolution * microsteppingInverse / 4)  // 3200 steps
-
-const char* ssid = "WE4DD9A3";
-const char* password = "aa07002c";
-int numOfScans = 0;
-bool firstSequence = false; // R L'
 
 // Initialize stepper motors
 AccelStepper backStepper(AccelStepper::DRIVER, STEP_PIN_backStepper, DIR_PIN_backStepper);
@@ -35,32 +39,70 @@ AccelStepper leftStepper(AccelStepper::DRIVER, STEP_PIN_leftStepper, DIR_PIN_lef
 AccelStepper downStepper(AccelStepper::DRIVER, STEP_PIN_downStepper, DIR_PIN_downStepper);
 AccelStepper frontStepper(AccelStepper::DRIVER, STEP_PIN_frontStepper, DIR_PIN_frontStepper);
 
-// TCP server on port 80
-WiFiServer server(80);
-
-void setup() {
-  // Start serial communication at 115200 baud rate
-  Serial.begin(115200);
-  WiFi.begin(ssid, password);
-
-  // Connect to the wifi and print the ESP32 IP address
-  Serial.println("Connecting to WiFi...");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi Connected!");
-  Serial.print("ESP32 IP Address: ");
-  Serial.println(WiFi.localIP());
-
-  server.begin();
+// HTML page
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>ESP32 Rubik's Cube Solver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial; text-align: center; margin:0px auto; padding-top: 30px; }
+    .button { padding: 10px 20px; font-size: 20px; margin: 10px; cursor: pointer; }
+    #solution { width: 80%; height: 100px; margin: 20px auto; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <h1>ESP32 Rubik's Cube Solver</h1>
+  <textarea id="solution" placeholder="Enter solution sequence here..."></textarea><br>
+  <button class="button" id="sendBtn">Execute Solution</button>
+  <button class="button" id="scanBtn">Scan Cube</button>
+  <div id="status">Status: Ready</div>
   
-  backStepper.setMaxSpeed(1000); backStepper.setAcceleration(500);
-  rightStepper.setMaxSpeed(1000); rightStepper.setAcceleration(500);
-  leftStepper.setMaxSpeed(1000); leftStepper.setAcceleration(500);
-  downStepper.setMaxSpeed(1000); downStepper.setAcceleration(500);
-  frontStepper.setMaxSpeed(1000); frontStepper.setAcceleration(500);
-}
+  <script>
+    var websocket;
+    window.addEventListener('load', onLoad);
+    
+    function initWebSocket() {
+      console.log('Trying to open a WebSocket connection...');
+      // Using port 81 for WebSocket
+      websocket = new WebSocket('ws://' + window.location.hostname + ':81/');
+      websocket.onopen = onOpen;
+      websocket.onclose = onClose;
+      websocket.onmessage = onMessage;
+    }
+    
+    function onOpen(event) {
+      console.log('Connection opened');
+      document.getElementById('status').innerHTML = 'Status: Connected';
+    }
+    
+    function onClose(event) {
+      console.log('Connection closed');
+      document.getElementById('status').innerHTML = 'Status: Disconnected';
+      setTimeout(initWebSocket, 2000);
+    }
+    
+    function onMessage(event) {
+      document.getElementById('status').innerHTML = 'Status: ' + event.data;
+    }
+    
+    function onLoad(event) {
+      initWebSocket();
+      document.getElementById('sendBtn').addEventListener('click', function() {
+        var solution = document.getElementById('solution').value;
+        if(solution.length > 0) {
+          websocket.send('SOLVE:' + solution);
+        }
+      });
+      document.getElementById('scanBtn').addEventListener('click', function() {
+        websocket.send('SCAN');
+      });
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
 
 void moveStepper(AccelStepper &stepper, bool left) {
   stepper.move(left ? stepsForHalfCycle : -stepsForHalfCycle);
@@ -69,134 +111,151 @@ void moveStepper(AccelStepper &stepper, bool left) {
   }
 }
 
-void stopMotors() {
-  backStepper.stop();
-  rightStepper.stop();
-  leftStepper.stop();
-  downStepper.stop();
-  frontStepper.stop();
-}
-
 void executeSolution(String solution) {
+  webSocket.broadcastTXT("Executing solution: " + solution);
+  
   for (int i = 0; i < solution.length(); i++) {
-      char c = solution.charAt(i);
-      if (c == 'B') {                         // green
-        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
-          moveStepper(backStepper, false);
-          i++;
-        } else {
-          moveStepper(backStepper, true);
-        }
-      } else if (c == 'R') {       // orange
-        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
-          moveStepper(rightStepper, false);
-          i++;
-        } else {
-          moveStepper(rightStepper, true);
-        }
-      } else if (c == 'L') {       // red
-        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
-          moveStepper(leftStepper, false);
-          i++;
-        } else {
-          moveStepper(leftStepper, true);
-        }
-      } else if (c == 'D') {       // yellow
-        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
-          moveStepper(downStepper, false);
-          i++;
-        } else {
-          moveStepper(downStepper, true);
-        }
-      } else if (c == 'F') {       // Blue
-        if (i + 1 < solution.length() && solution.charAt(i + 1) == '\'') {
-          moveStepper(frontStepper, false);
-          i++;
-        } else {
-          moveStepper(frontStepper, true);
-        }
-      } else if (c == '2') {
-        if (solution.charAt(i - 1) == 'B') {
-          moveStepper(backStepper, true);
-        } else if (solution.charAt(i - 1) == 'R') {
-          moveStepper(rightStepper, true);
-        } else if (solution.charAt(i - 1) == 'L') {
-          moveStepper(leftStepper, true);
-        } else if (solution.charAt(i - 1) == 'D') {
-          moveStepper(downStepper, true);
-        } else if (solution.charAt(i - 1) == 'F') {
-          moveStepper(frontStepper, true);
+    char c = solution.charAt(i);
+    if (c == 'B' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {        // green
+      moveStepper(backStepper, true);
+    } else if (c == 'R' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     // orange
+      moveStepper(rightStepper, true);
+    } else if (c == 'L' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {      // red
+      moveStepper(leftStepper, true);
+    } else if (c == 'D' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {     //yellow
+      moveStepper(downStepper, true);
+    } else if (c == 'F' && i + 1 < solution.length() && solution.charAt(i + 1) != '\'') {   // Blue
+      moveStepper(frontStepper, true);
+    } else if (c == '2') {
+      if (solution.charAt(i - 1) == 'B') {
+        moveStepper(backStepper, true);
+      } else if (solution.charAt(i - 1) == 'R') {
+        moveStepper(rightStepper, true);
+      } else if (solution.charAt(i - 1) == 'L') {
+        moveStepper(leftStepper, true);
+      } else if (solution.charAt(i - 1) == 'D') {
+        moveStepper(downStepper, true);
+      } else if (solution.charAt(i - 1) == 'F') {
+        moveStepper(frontStepper, true);
+      }
+    } else if (c == '\'') {
+      if (solution.charAt(i - 1) == 'B') {
+        moveStepper(backStepper, false);
+      } else if (solution.charAt(i - 1) == 'R') {
+        moveStepper(rightStepper, false);
+      } else if (solution.charAt(i - 1) == 'L') {
+        moveStepper(leftStepper, false);
+      } else if (solution.charAt(i - 1) == 'D') {
+        moveStepper(downStepper, false);
+      } else if (solution.charAt(i - 1) == 'F') {
+        moveStepper(frontStepper, false);
+      }
+    }
+    
+    // Send current move to connected clients
+    if (c == 'B' || c == 'R' || c == 'L' || c == 'D' || c == 'F') {
+      String moveInfo = String("Executing move: ") + c;
+      if (i + 1 < solution.length()) {
+        if (solution.charAt(i + 1) == '\'') {
+          moveInfo += "'";
+        } else if (solution.charAt(i + 1) == '2') {
+          moveInfo += "2";
         }
       }
-      delay(1000);
+      webSocket.broadcastTXT(moveInfo);
     }
+    
+    delay(1000);
+  }
+  
+  webSocket.broadcastTXT("Solution completed");
 }
 
-// return 0 if all scans are finished
-// return 1 if there are scans left
-int scan() {
-  // No more scans left
-  if (numOfScans > 12) {
-    return 0;
-  }
-
-  //  Sequence => scan => R L' => scan => B F // Repeat for all 6 faces
-  if (firstSequence) {
+void getInitState() {
+  webSocket.broadcastTXT("Starting cube scan sequence");
+  
+  for (int i = 0; i < 6; i++) {
+    // Sequence => scan => R L' => scan => B F // Repeat for all 6 faces
+    webSocket.broadcastTXT("Scanning face " + String(i+1) + "/6");
+    delay(3000);   // scan
     executeSolution("R L'");
-  } else {
+    delay(3000);
     executeSolution("B F'");
   }
-  delay(1000);
-
-  firstSequence = !firstSequence;
-  numOfScans++;
-
-  return 1;
+  
+  webSocket.broadcastTXT("Scan completed");
 }
 
-String getSolution(WiFiClient client) {
-  Serial.println("New Client Connected!");
-  String solution;
-  unsigned long timeout = millis();
-  while (client.connected() && millis() - timeout < 10000) { // 10 seconds timeout
-    if (client.available()) {
-      timeout = millis(); // Reset timeout
-      String command = client.readStringUntil('\n');
-      command.trim();
-      Serial.println("Received: " + command);
-
-      if (command == "STOP") {
-        stopMotors();
-        client.println("ACK_STOP");
-      } else if (command == "MOVE") {
-        if(!scan()) {
-          // All scans are done => send 
-          client.println("SCANS DONE");
-        } else {
-          client.println("ACK_MOVE");
-        }
-      } else if (command.startsWith("SOLVE:")) {
-        solution = command.substring(6);
-        client.println("ACK_SOLVE");
-        Serial.println("Solution: " + solution);
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+  switch(type) {
+    case WStype_DISCONNECTED:
+      Serial.printf("[%u] Disconnected!\n", num);
+      break;
+    case WStype_CONNECTED:
+      {
+        IPAddress ip = webSocket.remoteIP(num);
+        Serial.printf("[%u] Connected from %d.%d.%d.%d\n", num, ip[0], ip[1], ip[2], ip[3]);
+        webSocket.sendTXT(num, "Connected to ESP32");
       }
-    }
+      break;
+    case WStype_TEXT:
+      Serial.printf("[%u] got text: %s\n", num, payload);
+      
+      // Handle received message
+      String message = String((char*)payload);
+      if (message.startsWith("SOLVE:")) {
+        String solution = message.substring(6); // Extract the solution part
+        executeSolution(solution);
+      } 
+      else if (message == "SCAN") {
+        getInitState();
+      }
+      break;
   }
-  return solution;
+}
+
+void setup() {
+  // Start serial communication at 115200 baud rate
+  Serial.begin(115200);
+  
+  // Initialize stepper motors
+  backStepper.setMaxSpeed(1000); backStepper.setAcceleration(500);
+  rightStepper.setMaxSpeed(1000); rightStepper.setAcceleration(500);
+  leftStepper.setMaxSpeed(1000); leftStepper.setAcceleration(500);
+  downStepper.setMaxSpeed(1000); downStepper.setAcceleration(500);
+  frontStepper.setMaxSpeed(1000); frontStepper.setAcceleration(500);
+  
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  Serial.println("");
+  
+  // Wait for connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  Serial.println("");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  
+  // Initialize WebSocket server
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+  
+  // Handle Web Server requests
+  server.on("/", HTTP_GET, []() {
+    server.send(200, "text/html", index_html);
+  });
+  
+  // Start web server
+  server.begin();
+  Serial.println("HTTP server started");
 }
 
 void loop() {
-  WiFiClient client = server.available();
-  String solution;
-  if (client) {
-    solution = getSolution(client);
-  }
-  client.stop();
-
-  if(solution.length() > 0) {
-    executeSolution(solution);
-  }
-  
-  Serial.println("Client Disconnected");
-  // B2 R' F' R2 B' R F B2 L R L F2 B2 R' L' D R L F2 B2 R' L' R2 B2 L2 D' R2 F2 D2 F2 R L F2 B2 R' L' D R L F2 B2 R' L' 
+  webSocket.loop();
+  server.handleClient();
 }
