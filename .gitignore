@@ -5,3 +5,5 @@ temp
 *.sln
 *.suo
 __pycache__
+/venv
+/.idea
